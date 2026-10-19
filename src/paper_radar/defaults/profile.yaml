@@ -1,0 +1,87 @@
+# Default research profile. Everything here can be changed on the Settings page;
+# "Reset to defaults" there restores these values.
+#
+# Focus keywords are drawn from the CV (CV_NEW.pdf): cooperative transport with mobile
+# manipulators, EKF/SE(3) estimation and whole-body QP control, visual and LiDAR SLAM on
+# UAVs, imitation learning (ACT, SmolVLA, pi0) on SO-101/UR5, and soft robotics in agriculture.
+# Title matches earn full credit, abstract matches half.
+
+focus_keywords:
+  # Multi-robot & mobile manipulation
+  - cooperative transport
+  - cooperative manipulation
+  - mobile manipulation
+  - multi-robot
+  - decentralized
+  - whole-body control
+  - closed-chain
+  # State estimation & SLAM
+  - state estimation
+  - EKF
+  - SE(3)
+  - visual SLAM
+  - LiDAR SLAM
+  - LiDAR-inertial odometry
+  - visual-inertial odometry
+  - VIO
+  - IMU preintegration
+  - pose graph optimization
+  - loop closure
+  - place recognition
+  - relocalization
+  # Control & planning
+  - model predictive control
+  - quadratic program
+  - optimization-based control
+  - trajectory optimization
+  # Robot learning
+  - imitation learning
+  - action chunking
+  - diffusion policy
+  - vision-language-action
+  - SmolVLA
+  - π0
+  - LeRobot
+  - bimanual
+  - cloth folding
+  - teleoperation
+  - sim-to-real
+  - world model
+  # Platforms & settings
+  - UAV
+  - aerial robot
+  - Ackermann
+  - agricultural robot
+  - soft gripper
+  - soft robot
+  - bio-inspired
+  - low-cost
+
+refresh:
+  lookback_days: 14
+  max_results: 1500
+  cross_list_categories: [cs.CV, cs.LG, cs.AI, eess.SY]
+
+reading:
+  weekly_target: 4
+
+scoring:
+  # Points out of 100. Spec §6 suggests 45/25/20/10; 5 points are moved from topic match
+  # to an explicit venue-acceptance signal so accepted papers at strong venues surface.
+  weights:
+    interest: 40
+    keywords: 25
+    recency: 20
+    resources: 10
+    venue: 5
+  recency_half_life_days: 10
+
+digests:
+  # AI screening digests (needs a Claude API key; see Settings -> AI digests).
+  # Models: claude-opus-5-5 (default, most careful), claude-sonnet-5-5, claude-haiku-5-5.
+  model: claude-opus-5-5
+  # How hard the model thinks: low, medium, high, xhigh, max. medium is Anthropic's
+  # recommended starting point for Claude Opus 5.5.
+  effort: medium
+  # Full-text digests read at most this many characters of the paper (about 30k tokens).
+  fulltext_max_chars: 120000

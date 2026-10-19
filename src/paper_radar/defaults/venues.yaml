@@ -1,0 +1,48 @@
+# Venues recognised in the authors' arXiv comment or journal reference.
+# A venue only counts when acceptance or publication is stated explicitly
+# ("Accepted to CoRL 2026", "To appear in RA-L"); "submitted to" never counts.
+#
+# Aliases follow the same matching rules as taxonomy.yaml (all-caps = case-sensitive).
+
+top:
+  RSS: ["Robotics: Science and Systems", RSS]
+  CoRL: [Conference on Robot Learning, CoRL]
+  ICRA: [International Conference on Robotics and Automation, ICRA]
+  IROS: [Intelligent Robots and Systems, IROS]
+  T-RO: [Transactions on Robotics, T-RO, TRO]
+  IJRR: [International Journal of Robotics Research, IJRR]
+  RA-L: [Robotics and Automation Letters, RA-L, RAL]
+  Science Robotics: [Science Robotics]
+  Humanoids: [International Conference on Humanoid Robots, Humanoids]
+  ISRR: [International Symposium on Robotics Research, ISRR]
+  WAFR: [Algorithmic Foundations of Robotics, WAFR]
+  NeurIPS: [NeurIPS, Neural Information Processing Systems]
+  ICLR: [ICLR, International Conference on Learning Representations]
+  ICML: [ICML, International Conference on Machine Learning]
+  CVPR: [CVPR, Computer Vision and Pattern Recognition]
+  ICCV: [ICCV, International Conference on Computer Vision]
+  ECCV: [ECCV, European Conference on Computer Vision]
+
+known:
+  T-ASE: [Transactions on Automation Science and Engineering, T-ASE, TASE]
+  T-MECH: [Transactions on Mechatronics, T-MECH, TMECH]
+  Autonomous Robots: [Autonomous Robots]
+  JFR: [Journal of Field Robotics, JFR]
+  RAS: [Robotics and Autonomous Systems]
+  RAM: [Robotics and Automation Magazine, Robotics & Automation Magazine]
+  RoboSoft: [RoboSoft]
+  HRI: [Human-Robot Interaction, HRI]
+  ISER: [International Symposium on Experimental Robotics, ISER]
+  CASE: [Conference on Automation Science and Engineering]
+  L4DC: [L4DC, Learning for Dynamics and Control]
+  CDC: [Conference on Decision and Control, CDC]
+  ACC: [American Control Conference]
+  AAAI: [AAAI]
+  IJCAI: [IJCAI]
+  3DV: [3DV, International Conference on 3D Vision]
+  WACV: [WACV]
+  BMVC: [BMVC]
+  ICUAS: [ICUAS, Unmanned Aircraft Systems]
+  ECMR: [ECMR, European Conference on Mobile Robots]
+  Frontiers in Robotics and AI: [Frontiers in Robotics and AI]
+  Industrial Robot: [Industrial Robot]

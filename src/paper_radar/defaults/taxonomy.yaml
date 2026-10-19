@@ -1,0 +1,262 @@
+# Robotics taxonomy (spec §4): what topics exist and how to recognise them.
+# Your personal preferences (weights, keywords) live in profile.yaml and the Settings page.
+#
+# How phrases match (see src/paper_radar/text.py):
+#   - case-insensitive, tolerant of hyphen/space variants ("sim-to-real" = "sim to real")
+#     and a plural "s"/"es"
+#   - phrases with no lowercase letters (SLAM, VIO, ACT) are acronyms and match case-sensitively
+#   - a trailing * matches any word ending ("manipulat*" -> manipulation, manipulator)
+#   - "re:" starts a raw regular expression (case-insensitive)
+#   - UK spellings in papers are normalised to US before matching (optimisation -> optimization)
+#
+# Scoring: each tag and strong term found in the title counts 2, in the abstract 1;
+# weak terms count 0.35 as much. The highest-scoring category becomes the primary topic.
+
+version: 1
+
+interest_groups:
+  - id: slam
+    name: SLAM, perception & state estimation
+    default_weight: 20
+  - id: manipulation
+    name: Manipulation & mobile manipulation
+    default_weight: 20
+  - id: learning
+    name: Robot learning, imitation learning & VLA
+    default_weight: 20
+  - id: world_models
+    name: World models & predictive robotics
+    default_weight: 15
+  - id: planning
+    name: Planning, control & navigation
+    default_weight: 10
+  - id: locomotion
+    name: Locomotion & legged robots
+    default_weight: 5
+  - id: soft
+    name: Soft robotics & tactile sensing
+    default_weight: 5
+  - id: other
+    name: Other robotics
+    default_weight: 5
+
+categories:
+  # "terms" are evidence for the category that is not already covered by its tags.
+  - id: slam_perception
+    name: SLAM, Perception & State Estimation
+    short: SLAM & perception
+    group: slam
+    arxiv_hints: [cs.CV]
+    terms:
+      strong: [SLAM, odometry, pose graph, scan matching, point cloud registration, ICP, depth estimation, localization and mapping, scene understanding]
+      weak: [localization, mapping, perception, point cloud*, lidar, stereo, monocular, IMU, occupancy, object detection, segmentation]
+    tags:
+      Visual SLAM: [visual SLAM, VSLAM, monocular SLAM, stereo SLAM, RGB-D SLAM, ORB-SLAM*, visual odometry, direct sparse odometry]
+      LiDAR SLAM: [lidar SLAM, lidar odometry, lidar mapping, LOAM, KISS-ICP, scan-to-map]
+      VIO: [visual inertial odometry, visual inertial navigation, visual inertial SLAM, VIO, VINS*, MSCKF]
+      LiDAR-Inertial Odometry: [lidar inertial odometry, lidar inertial, LIO, FAST-LIO*, LIO-SAM]
+      Loop Closure: [loop closure, loop closing, loop detection]
+      Place Recognition: [place recognition, relocalization, global localization, visual localization]
+      Sensor Fusion: [sensor fusion, multi-sensor fusion, Kalman filter*, EKF, UKF, error-state, factor graph*, IMU preintegration, preintegration]
+      State Estimation: [state estimation, state estimator*, invariant filter*, Lie group*, on-manifold, inertial navigation, inertial odometry, inertial localization]
+      3D Reconstruction: [3D reconstruction, dense reconstruction, surface reconstruction, neural implicit, NeRF, neural radiance field*, TSDF, signed distance field*]
+      Gaussian Splatting: [Gaussian splatting, 3DGS, Gaussian SLAM, splatting]
+      Object Pose Estimation: [6D pose, 6-DoF pose estimation, object pose estimation, pose tracking, category-level pose]
+      Event Cameras: [event camera*, event-based vision, event-based, dynamic vision sensor*, neuromorphic]
+      Semantic Mapping: [semantic mapping, semantic map*, 3D scene graph*, scene graph*, open-vocabulary mapping, open-vocabulary 3D]
+      Active Perception: [active perception, active vision, next-best-view, view planning, visual tracking, embodied visual tracking]
+
+  - id: manipulation
+    name: Manipulation & Grasping
+    short: Manipulation
+    group: manipulation
+    arxiv_hints: []
+    terms:
+      strong: [manipulation, grasp*, pick-and-place, robot arm*, robotic arm*, end-effector*, gripper*, manipulator*]
+      weak: [contact, insertion, assembly, rearrangement, pushing, tabletop]
+    tags:
+      Grasping: [grasping, grasp planning, grasp detection, grasp synthesis, grasp pose*, antipodal]
+      Dexterous Manipulation: [dexterous, in-hand manipulation, in-hand, multi-fingered, anthropomorphic hand*, robot hand*, robotic hand*]
+      Bimanual: [bimanual, dual-arm, two-arm]
+      Contact-Rich Manipulation: [contact-rich, peg-in-hole, peg insertion, robotic assembly, assembly task*]
+      Deformable Objects: [deformable object*, deformable manipulation, cloth, garment*, fabric*, cable manipulation, rope manipulation, cloth folding]
+      Force & Impedance Control: [force control, impedance control, admittance control, compliance control, hybrid force, force/torque, variable impedance]
+      Articulated Objects: [articulated object*, door opening, drawer opening]
+      Non-Prehensile: [non-prehensile, nonprehensile, planar pushing]
+      Tool Use: [tool use, tool manipulation]
+
+  - id: mobile_multi
+    name: Mobile Manipulation & Multi-Robot Coordination
+    short: Mobile manipulation & multi-robot
+    group: manipulation
+    arxiv_hints: [cs.MA]
+    terms:
+      strong: [swarm*, multi-agent system*]
+      weak: [cooperative, collaborative, coordination, decentralized, distributed, multi-agent]
+    tags:
+      Mobile Manipulator: [mobile manipulation, mobile manipulator*, wheeled manipulator*, whole-body mobile manipulation]
+      Multi-Robot Systems: [multi-robot, multi-robot system*, multiple robots, robot team*, heterogeneous robots, robot fleet*]
+      Cooperative Transport: [cooperative transport*, collaborative transport*, payload transport*, object transport*, cooperative manipulation, collaborative manipulation, co-manipulation, multi-robot manipulation]
+      Task Allocation: [task allocation, task assignment, MRTA]
+      Decentralized Coordination: [decentralized control, decentralized planning, distributed control, consensus, formation control, multi-agent path finding, MAPF, multi-robot coordination, multi-robot planning]
+      Swarm Robotics: [swarm robotics, robot swarm*]
+
+  - id: robot_learning
+    name: Robot Learning & Imitation Learning
+    short: Robot learning
+    group: learning
+    arxiv_hints: [cs.LG]
+    terms:
+      strong: [policy learning, robot learning, skill learning]
+      weak: [policy, policies, demonstration*, reward]
+    tags:
+      Imitation Learning: [imitation learning, behavior cloning, learning from demonstration*, LfD]
+      Diffusion Policy: [diffusion policy, diffusion policies, diffusion-based polic*, flow matching polic*, flow-matching polic*, flow policy, consistency policy]
+      Action Chunking: [action chunking, action chunk*, ACT]
+      Reinforcement Learning: [reinforcement learning, deep RL, RL, PPO, policy gradient*, actor-critic]
+      Offline RL: [offline reinforcement learning, offline RL]
+      Sim-to-Real: [sim-to-real, sim2real, simulation-to-reality, domain randomization, reality gap]
+      Visuomotor Policy: [visuomotor, end-to-end polic*]
+      Reward Learning: [reward learning, reward model*, inverse reinforcement learning, preference-based]
+      Learning from Human Video: [human video*, egocentric video*, human demonstration video*]
+
+  - id: vla_foundation
+    name: VLA & Robot Foundation Models
+    short: VLA & foundation models
+    group: learning
+    arxiv_hints: []
+    terms:
+      strong: [generalist robot*, embodied agent*, embodied AI]
+      weak: [pretrained, pre-trained, multimodal, transformer]
+    tags:
+      VLA: [vision-language-action, VLA, π0, π0.5, pi-0, OpenVLA, RT-2, SmolVLA, GR00T, Octo]
+      Robot Foundation Models: [robot foundation model*, foundation model*, generalist polic*, generalist robot polic*, large behavior model*]
+      Language-Conditioned: [language-conditioned, instruction following, natural language instruction*, language instruction*, language-guided]
+      LLM/VLM Reasoning: [large language model*, LLM, vision-language model*, VLM, multimodal large language model*, MLLM, embodied reasoning, chain-of-thought]
+      Cross-Embodiment: [cross-embodiment, embodiment-agnostic, multi-embodiment]
+
+  - id: world_models
+    name: World Models & Predictive Robotics
+    short: World models
+    group: world_models
+    arxiv_hints: []
+    terms:
+      strong: [video generation model*, predictive model*, physics prediction]
+      weak: [imagination, future frame*, forecasting]
+    tags:
+      World Models: [world model*, world action model*, world modeling]
+      Video Models: [video generation, video prediction, video diffusion, video model*, action-conditioned video]
+      Learned Dynamics: [learned dynamics, dynamics model*, latent dynamics, forward model*, neural dynamics]
+      Model-Based RL: [model-based reinforcement learning, model-based RL, MBRL, Dreamer*, TD-MPC*, latent planning]
+
+  - id: locomotion
+    name: Locomotion & Legged Robots
+    short: Locomotion
+    group: locomotion
+    arxiv_hints: []
+    terms:
+      strong: [locomotion, legged, biped*, gait*, walking robot*]
+      weak: [terrain, walking, jumping, footstep*, balance]
+    tags:
+      Quadrupeds: [quadruped*, quadrupedal, legged robot*, robot dog*, ANYmal, Unitree Go*]
+      Humanoids: [humanoid*, Unitree G1, Unitree H1]
+      Whole-Body Control: [whole-body control, whole-body controller*, whole-body motion, whole-body QP, WBC]
+      Loco-Manipulation: [loco-manipulation, locomanipulation, legged manipulation, legged mobile manipulat*]
+      Terrain & Agility: [rough terrain, uneven terrain, parkour, stair*, agile locomotion, terrain-aware]
+      Motion Retargeting: [motion retargeting, motion tracking, motion imitation]
+
+  - id: planning_control_nav
+    name: Planning, Control & Navigation
+    short: Planning & control
+    group: planning
+    arxiv_hints: [eess.SY, cs.SY, math.OC]
+    terms:
+      strong: [path planning, trajectory planning, collision avoidance, obstacle avoidance, feedback control, robust control, adaptive control]
+      weak: [control, controller*, planner*, planning, trajector*, safety, stability, constraint*]
+    tags:
+      Motion Planning: [motion planning, motion planner*, sampling-based, RRT*, PRM, kinodynamic, collision-free]
+      MPC: [model predictive control, MPC, NMPC, receding horizon]
+      Trajectory Optimization: [trajectory optimization, optimal control, iLQR, DDP, direct collocation, trajectory generation]
+      Optimization-Based Control: [quadratic program*, QP, convex optimization, optimization-based control, SQP, OSQP]
+      Navigation: [navigation, autonomous navigation, local planner*, global planner*, object-goal navigation, vision-language navigation, VLN, social navigation]
+      Safe Control: [control barrier function*, CBF, safety filter*, reachability, safe control, safety-critical]
+      Task & Motion Planning: [task and motion planning, TAMP, task planning, long-horizon planning]
+      Visual Servoing: [visual servoing, image-based visual servoing, IBVS, PBVS]
+      Kinematics & Dynamics: [inverse kinematics, forward kinematics, inverse dynamics, closed-chain, kinematic chain*, parallel robot*, parallel mechanism*]
+
+  - id: soft_tactile
+    name: Soft Robotics & Tactile Sensing
+    short: Soft & tactile
+    group: soft
+    arxiv_hints: []
+    terms:
+      strong: [soft robot*, compliant mechanism*, soft material*]
+      weak: [compliant, compliance, elastomer*, pneumatic, silicone]
+    tags:
+      Soft Actuators: [soft actuator*, pneumatic actuator*, artificial muscle*, dielectric elastomer*, fluidic actuator*, shape memory alloy, HASEL]
+      Soft Grippers: [soft gripper*, soft hand*, soft finger*, compliant gripper*, fin ray]
+      Tactile Sensing: [tactile, touch sensing, GelSight, visuotactile, vision-based tactile, electronic skin, e-skin]
+      Continuum Robots: [continuum robot*, tendon-driven, concentric tube]
+      Bio-inspired Design: [bio-inspired, bioinspired, biomimetic*, biomimicry]
+      Material Intelligence: [embodied intelligence, morphological computation, physical intelligence, material intelligence]
+
+  - id: aerial_field
+    name: Aerial Robots & Field Robotics
+    short: Aerial & field
+    group: other
+    arxiv_hints: []
+    terms:
+      strong: [field robot*, agricultural robot*, legged field robot*]
+      weak: [outdoor, unstructured environment*, forest*, GNSS, GPS]
+    tags:
+      UAVs: [UAV, UAS, MAV, drone*, quadrotor*, quadcopter*, multirotor*, aerial robot*, micro aerial vehicle*, aerial vehicle*]
+      Aerial Manipulation: [aerial manipulation, aerial manipulator*]
+      Agriculture: [agricultur*, crops, crop row*, harvesting robot*, fruit picking, greenhouse*, orchard*, weeding]
+      Inspection: [inspection]
+      Marine & Underwater: [underwater, marine robot*, AUV, ROV, USV, subsea]
+      Autonomous Driving: [autonomous driving, self-driving, autonomous vehicle*, Ackermann, end-to-end driving, automated driving]
+      Off-Road & Outdoor: [off-road, outdoor navigation, unstructured terrain, field deployment]
+      Space Robotics: [planetary, lunar, Mars rover*, space robot*, on-orbit, spacecraft]
+
+  - id: sim_systems
+    name: Simulation, Benchmarking & Robot Systems
+    short: Sim, benchmarks & systems
+    group: other
+    arxiv_hints: []
+    terms:
+      strong: [hardware design, system design, data collection system*]
+      weak: [simulation, benchmark*, dataset*, evaluation, framework, platform, toolkit]
+    tags:
+      Simulators: [simulator*, physics simulation, MuJoCo, Isaac Sim, Isaac Lab, Gazebo, PyBullet, digital twin*, real-to-sim, differentiable simulation]
+      Benchmarks: ['re:\b(?:introduc|present|propos|releas|build|construct)\w*\s+(?:\w+[\s-]+){0,4}benchmark', benchmark suite*]
+      Datasets: ['re:\b(?:introduc|present|propos|releas|collect|curat)\w*\s+(?:\w+[\s-]+){0,4}dataset', large-scale dataset*]
+      Teleoperation: [teleoperation, teleoperated, teleop, VR teleoperation]
+      Calibration: [calibration, extrinsic calibration, hand-eye calibration]
+      Low-Cost Hardware: [low-cost, open-source hardware, affordable robot*, SO-100, SO-101, LeRobot, open-source robot*]
+      Robot Software & ROS: [ROS, ROS 2, ROS2, middleware]
+      Edge Deployment: [onboard compute, Jetson, edge device*, resource-constrained]
+
+  - id: other
+    name: Other Robotics
+    short: Other robotics
+    group: other
+    arxiv_hints: []
+    terms:
+      strong: []
+      weak: []
+    tags:
+      Human-Robot Interaction: [human-robot interaction, HRI, human-robot collaboration, shared autonomy, social robot*, spoken, speech, conversational robot*]
+      Medical & Rehabilitation: [surgical, surgery, medical robot*, rehabilitation, exoskeleton*, prosthe*, upper-limb, lower-limb, assist-as-needed]
+      Robotics Education: [robotics education, remote laborator*, remote lab, educational robot*]
+      Failure Detection & Recovery: [failure detection, failure recovery, anomaly detection, runtime monitoring]
+      Robot Design: [mechanism design, mechanical design, co-design, morphology optimization, deployable mechanism*, linkage*]
+
+# A paper whose arXiv categories do not include cs.RO is kept only if it shows at least
+# this much robotics evidence (title hit = 2, abstract hit = 1).
+robotics_gate:
+  min_evidence: 2
+  anchors: [robot*, grasp*, locomotion, legged, humanoid*, quadruped*, UAV, drone*, quadrotor*, SLAM, odometry, embodied, autonomous driving, self-driving, gripper*, end-effector*, teleoperation, visuomotor, sim-to-real, vision-language-action, manipulator*, mobile manipulation, autonomous vehicle*]
+
+# arXiv search terms used to find robotics papers that are only listed in neighbouring
+# categories (cs.CV, cs.LG, ...). arXiv stems words, so "robot" also finds "robots".
+arxiv_cross_list_terms: [robot, robotic, robotics, SLAM, odometry, humanoid, quadruped, legged, grasping, embodied, "vision-language-action", UAV, drone, locomotion, manipulator]
