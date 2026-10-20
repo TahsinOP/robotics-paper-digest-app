@@ -134,6 +134,9 @@ h1 { letter-spacing: -0.012em; }
 .pr-tag { border-radius: 6px; border-color: var(--pr-rule-2); color: var(--pr-ink-2); }
 .pr-venue { border-radius: 6px; background: var(--pr-accent-bg); color: var(--pr-accent); font-weight: 600; }
 .pr-state { border-radius: 100px; color: var(--pr-accent); border-color: color-mix(in srgb, var(--pr-accent) 40%%, var(--pr-paper)); }
+.pr-cites { border-radius: 6px; border-color: color-mix(in srgb, var(--pr-accent) 30%%, var(--pr-paper)); color: var(--pr-ink-2); font-variant-numeric: tabular-nums; }
+.pr-cited-title { font-family: var(--pr-serif); font-size: 1.2rem; line-height: 1.3; font-weight: 600; color: var(--pr-ink); }
+[class*="st-key-cited-"] { border-bottom: 1px solid var(--pr-rule); padding: 0.8rem 0 0.9rem; }
 .pr-why { font-size: 0.87rem; line-height: 1.5; color: var(--pr-graphite); margin: 0.15rem 0 0; max-width: 40rem; }
 
 /* Quiet text actions under each entry; the shortlisted state takes the accent colour */
@@ -264,12 +267,16 @@ def chips_html(paper: Paper, taxonomy: Taxonomy, *, max_tags: int = 3, extra: tu
     parts += [f'<span class="pr-chip pr-tag">{esc(tag)}</span>' for tag in paper.secondary_tags[:max_tags]]
     if paper.venue_name:
         parts.append(f'<span class="pr-chip pr-venue" title="Stated in the authors\' arXiv comment">{esc(paper.venue_name)}</span>')
+    if paper.citation_count is not None:
+        parts.append(
+            f'<span class="pr-chip pr-cites" title="Citations counted by Semantic Scholar">{paper.citation_count:,} citations</span>'
+        )
     parts += [f'<span class="pr-chip pr-state">{esc(label)}</span>' for label in extra]
     return f'<div class="pr-chips">{"".join(parts)}</div>'
 
 
-def gutter_html(paper: Paper) -> str:
-    score = paper.relevance_score
+def gutter_html(paper: Paper, *, timeless: bool = False) -> str:
+    score = paper.timeless_score if timeless and paper.timeless_score is not None else paper.relevance_score
     shown = "–" if score is None else f"{score:.0f}"
     high = " pr-high" if score is not None and score >= 70 else ""
     return (

@@ -305,7 +305,7 @@ class DigestOutcome:
     cached: bool
 
 
-def _parse(data: dict, level: str) -> Digest:
+def parse_digest(data: dict, level: str) -> Digest:
     try:
         confidence = min(1.0, max(0.0, float(data.get("confidence", 0.0))))
     except (TypeError, ValueError):
@@ -369,9 +369,12 @@ def generate_digest(
             )
             conn.commit()
             raise DigestError(str(exc), exc.kind) from exc
-        cost = estimate_cost(response.model, response.input_tokens, response.output_tokens)
-        if cost is None:
-            cost = estimate_cost(provider.model, response.input_tokens, response.output_tokens)
+        if getattr(provider, "billed_per_token", True):
+            cost = estimate_cost(response.model, response.input_tokens, response.output_tokens)
+            if cost is None:
+                cost = estimate_cost(provider.model, response.input_tokens, response.output_tokens)
+        else:
+            cost = None  # covered by a subscription (Claude Code), not billed per token
         digest_repo.record_call(
             conn, paper_id=paper.id, provider=provider.name, model=response.model, purpose=purpose, status="ok",
             error_kind=None, input_tokens=response.input_tokens, output_tokens=response.output_tokens, cost_usd=cost,
@@ -383,13 +386,13 @@ def generate_digest(
         return response.data, response.model
 
     data, served_model = call(prompt, f"digest:{source.level}")
-    digest = _parse(data, source.level)
+    digest = parse_digest(data, source.level)
     if progress:
         progress("Checking the digest against the inspected text…")
     problems = check_digest(digest, source, paper, taxonomy)
     if problems:
         data, served_model = call(repair_prompt(prompt, data, problems), "repair")
-        digest = _parse(data, source.level)
+        digest = parse_digest(data, source.level)
         problems = check_digest(digest, source, paper, taxonomy)
     if problems:
         known = set(taxonomy.tag_names)
@@ -412,8 +415,9 @@ def generate_digest(
         source_note=source.note,
         input_tokens=totals["in"],
         output_tokens=totals["out"],
-        cost_usd=round(totals["cost"], 6),
+        cost_usd=round(totals["cost"], 6) if getattr(provider, "billed_per_token", True) else None,
         now=now,
+        engine=provider.name,
     )
     conn.commit()
     return DigestOutcome(record=record, cached=False)

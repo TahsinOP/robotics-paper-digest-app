@@ -43,7 +43,7 @@ def run_page(module: str) -> AppTest:
     return app
 
 
-@pytest.mark.parametrize("module", ["feed", "queue", "library", "settings"])
+@pytest.mark.parametrize("module", ["feed", "queue", "explore", "library", "settings"])
 def test_pages_render(seeded_db, module) -> None:
     run_page(module)
 
@@ -108,11 +108,46 @@ def test_feed_shows_ai_takeaways_marked_as_ai(seeded_db, prefs, taxonomy) -> Non
     assert 'class="pr-ai"' in bodies and "Adding loop closure" in bodies
 
 
-@pytest.mark.parametrize("with_key", [False, True])
-def test_settings_ai_section_in_both_key_states(seeded_db, monkeypatch, with_key) -> None:
-    if with_key:
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    app = run_page("settings")
-    text = " ".join(str(c.value) for c in app.caption)
-    assert ("environment variable" in text) if with_key else ("No Claude API key yet" in text)
-    assert "sk-ant-test" not in text
+def _captions(app) -> str:
+    return " ".join(str(c.value) for c in app.caption)
+
+
+def test_settings_with_claude_code_missing_and_present(seeded_db, tmp_path, monkeypatch) -> None:
+    assert "Claude Code isn't installed" in _captions(run_page("settings"))
+    fake = tmp_path / "claude"
+    fake.write_text("#!/bin/sh\nexit 1\n")  # `claude mcp get` fails: not connected
+    fake.chmod(0o755)
+    monkeypatch.setenv("PAPER_RADAR_CLAUDE_BIN", str(fake))
+    text = _captions(run_page("settings"))
+    assert f"Claude Code found at {fake}" in text
+
+
+def test_settings_with_api_key_engine(seeded_db, monkeypatch, prefs, taxonomy) -> None:
+    from dataclasses import replace
+
+    from paper_radar.preferences import save_preferences
+
+    with db.session(seeded_db) as conn:
+        save_preferences(conn, replace(prefs, digest_engine="api"), taxonomy, NOW)
+    assert "No Claude API key yet" in _captions(run_page("settings"))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    text = _captions(run_page("settings"))
+    assert "environment variable" in text and "sk-ant-test" not in text
+
+
+def test_library_year_filter_and_explore_search(seeded_db) -> None:
+    app = AppTest.from_string(PAGE_SCRIPT.format(module="library"), default_timeout=30)
+    app.session_state["lib_year"] = 2026
+    app.run()
+    assert not app.exception
+    assert [o for o in app.selectbox(key="lib_year").options] == ["Any year", "2026"]
+
+    explore_app = AppTest.from_string(PAGE_SCRIPT.format(module="explore"), default_timeout=30)
+    explore_app.session_state["explore_year"] = 2026
+    explore_app.session_state["explore_month"] = 10
+    explore_app.session_state["explore_search"] = "loop closure"
+    explore_app.run()
+    assert not explore_app.exception
+    captions = " ".join(str(c.value) for c in explore_app.caption)
+    assert "1 match in your library" in captions
+    assert any("Search arXiv for" in b.label for b in explore_app.button)

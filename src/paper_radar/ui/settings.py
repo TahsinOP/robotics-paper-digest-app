@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import streamlit as st
-
 from dataclasses import replace
 from datetime import datetime
 
+import streamlit as st
+
+from paper_radar import cli
 from paper_radar.llm import credentials
 from paper_radar.llm.anthropic_provider import AnthropicProvider
 from paper_radar.llm.base import EFFORT_LEVELS, MODELS, LLMError
+from paper_radar.llm.claude_code_provider import ClaudeCodeProvider
+from paper_radar.llm.factory import ENGINES, engine_status
+from paper_radar.sources.semantic_scholar import KEY_VAR as S2_KEY_VAR
 from paper_radar.preferences import (
     ARXIV_CROSS_LIST_OPTIONS,
     FULLTEXT_CHARS_RANGE,
@@ -153,62 +157,106 @@ def _save_digest_setting(field: str, key: str) -> None:
     st.toast("Saved.", icon=":material/check_circle:")
 
 
-def _save_key() -> None:
+def _save_secret(var: str, input_key: str, success: str) -> None:
     try:
-        credentials.save_key(st.session_state.get("api-key-input", ""))
+        credentials.save_key(st.session_state.get(input_key, ""), var)
     except ValueError as exc:
         st.session_state["key_message"] = ("error", str(exc))
     else:
-        st.session_state["key_message"] = ("success", "Key saved. Digests are on.")
-    st.session_state["api-key-input"] = ""
+        st.session_state["key_message"] = ("success", success)
+    st.session_state[input_key] = ""
 
 
-def _remove_key() -> None:
-    credentials.remove_key()
-    st.session_state["key_message"] = ("info", "Saved key removed.")
+def _remove_secret(var: str, message: str) -> None:
+    credentials.remove_key(var)
+    st.session_state["key_message"] = ("info", message)
+
+
+def _connect_mcp() -> None:
+    ok, message = cli.register_mcp()
+    st.session_state["key_message"] = ("success" if ok else "error", message)
+    st.session_state.pop("mcp_registered", None)
+
+
+def _secret_form(form_key: str, label: str, var: str, *, replace_label: bool, help_text: str, success: str) -> None:
+    with st.form(form_key, border=False, enter_to_submit=True):
+        st.text_input(label, key=f"{form_key}-input", type="password", help=help_text)
+        st.form_submit_button(
+            "Replace key" if replace_label else "Save key",
+            on_click=_save_secret,
+            args=(var, f"{form_key}-input", success),
+        )
 
 
 def _ai_section(ctx: AppContext, prefs: Preferences, n: int) -> None:
     st.subheader("AI digests")
     st.caption(
-        "Claude writes two-minute screening digests on request, from a paper's abstract or its full text. "
-        "Each digest says which it used. You pay Anthropic per use with your own API key."
+        "Claude writes two-minute screening digests on request, from a paper's abstract or its full text, "
+        "and every digest says which it used."
     )
-    status = credentials.status()
     if kind_message := st.session_state.pop("key_message", None):
         kind, message = kind_message
         getattr(st, kind)(message)
+
+    st.session_state.setdefault(f"set-digest-engine-{n}", prefs.digest_engine)
+    st.segmented_control(
+        "Engine",
+        list(ENGINES),
+        key=f"set-digest-engine-{n}",
+        format_func=ENGINES.get,
+        required=True,
+        on_change=_save_digest_setting,
+        args=("digest_engine", f"set-digest-engine-{n}"),
+        help="Claude Code runs on your Claude subscription's usage limits. An API key is billed per use by Anthropic.",
+    )
+    status = engine_status(prefs.digest_engine)
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-        st.badge("Ready" if status.configured else "Off", icon=":material/key:" if status.configured else ":material/key_off:",
-                 color="green" if status.configured else "gray")
+        st.badge("Ready" if status.ready else "Off", icon=":material/check_circle:" if status.ready else ":material/block:",
+                 color="green" if status.ready else "gray")
         st.caption(status.description)
         st.space("stretch")
-        if status.configured and st.button("Check key", type="tertiary", icon=":material/verified:"):
+        if status.ready and st.button(
+            "Test",
+            type="tertiary",
+            icon=":material/verified:",
+            help="Claude Code: one tiny request on your plan. API key: a free token count.",
+        ):
             try:
-                AnthropicProvider(prefs.digest_model).check()
+                if prefs.digest_engine == "api":
+                    AnthropicProvider(prefs.digest_model).check()
+                    st.success(f"The key works with {MODELS[prefs.digest_model].label}.")
+                else:
+                    served = ClaudeCodeProvider(prefs.digest_model).check()
+                    st.success(f"Claude Code answered using {MODELS.get(served).label if served in MODELS else served}.")
             except LLMError as exc:
                 st.error(str(exc))
-            else:
-                st.success(f"The key works with {MODELS[prefs.digest_model].label}.")
-        if "saved in" in status.description:
-            st.button("Remove saved key", type="tertiary", icon=":material/delete:", on_click=_remove_key)
-    if not status.configured or "saved in" in status.description:
-        with st.form("api-key", border=False, enter_to_submit=True):
-            st.text_input(
-                "Claude API key",
-                key="api-key-input",
-                type="password",
-                placeholder="sk-ant-…",
-                help="Create one at console.anthropic.com. It's stored in your user config folder, readable only by you, "
-                "and never in the paper database.",
+
+    if prefs.digest_engine == "api":
+        key_saved = credentials.is_saved(credentials.KEY_VAR)
+        if not status.ready or key_saved:
+            _secret_form(
+                "api-key", "Claude API key", credentials.KEY_VAR, replace_label=key_saved,
+                help_text="Create one at console.anthropic.com. It's stored in your user config folder, readable only "
+                "by you, and never in the paper database.",
+                success="Key saved. Digests are on.",
             )
-            st.form_submit_button("Save key" if not status.configured else "Replace key", on_click=_save_key)
+        if key_saved:
+            st.button("Remove saved key", type="tertiary", icon=":material/delete:", on_click=_remove_secret,
+                      args=(credentials.KEY_VAR, "Saved key removed."))
+    else:
+        st.caption(
+            "Claude Code runs with no tools and sees only the paper text the app passes in. "
+            "Each digest counts toward your plan's usage limits, like any Claude Code request."
+        )
 
     st.selectbox(
         "Model",
         list(MODELS),
         index=list(MODELS).index(prefs.digest_model),
-        format_func=lambda m: f"{MODELS[m].label}: ${MODELS[m].input_per_mtok:g} / ${MODELS[m].output_per_mtok:g} per million tokens. {MODELS[m].note}",
+        format_func=lambda m: (
+            f"{MODELS[m].label}. {MODELS[m].note}" if prefs.digest_engine != "api"
+            else f"{MODELS[m].label}: ${MODELS[m].input_per_mtok:g} / ${MODELS[m].output_per_mtok:g} per million tokens. {MODELS[m].note}"
+        ),
         key=f"set-digest-model-{n}",
         on_change=_save_digest_setting,
         args=("digest_model", f"set-digest-model-{n}"),
@@ -221,7 +269,8 @@ def _ai_section(ctx: AppContext, prefs: Preferences, n: int) -> None:
         required=True,
         on_change=_save_digest_setting,
         args=("digest_effort", f"set-digest-effort-{n}"),
-        help="How hard the model thinks. Medium is Anthropic's recommended starting point; higher levels cost more.",
+        help="How hard the model thinks. Medium is Anthropic's recommended starting point; higher levels take longer "
+        "and use more of your plan or budget.",
     )
     st.number_input(
         "Read at most this many characters of a full paper",
@@ -239,7 +288,37 @@ def _ai_section(ctx: AppContext, prefs: Preferences, n: int) -> None:
         usage = digest_repo.usage_since(conn, month_start)
     if usage.calls:
         failed = f", {usage.failed} failed" if usage.failed else ""
-        st.caption(
-            f"This month: {usage.digests} digests from {usage.calls} Claude calls{failed}, "
-            f"about ${usage.cost_usd:.2f} (estimated from token counts)."
-        )
+        spend = f", about ${usage.cost_usd:.2f} on the API (estimated)" if usage.cost_usd else ""
+        st.caption(f"This month: {usage.digests} digests from {usage.calls} Claude calls{failed}{spend}.")
+
+    st.space("small")
+    st.markdown("**Your Claude Code sessions**")
+    st.caption(
+        "Connect Paper Radar to Claude Code (MCP) and you can ask any Claude Code session to work with your "
+        'library, using your skills: "digest this week\'s papers", "deep-read paper 12 with deepread", '
+        '"most cited SLAM papers of 2023". Digests saved there appear here, checked the same way.'
+    )
+    if "mcp_registered" not in st.session_state:
+        st.session_state["mcp_registered"] = cli.mcp_registered()
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        connected = st.session_state["mcp_registered"]
+        st.badge("Connected" if connected else "Not connected", icon=":material/hub:", color="green" if connected else "gray")
+        st.button("Reconnect" if connected else "Connect to Claude Code", icon=":material/link:", type="tertiary",
+                  on_click=_connect_mcp, disabled=engine_status("claude_code").ready is False)
+
+    st.space("medium")
+    st.subheader("Citations")
+    st.caption(
+        "The Explore page ranks a year's papers by citations from Semantic Scholar, which merges arXiv and published "
+        "versions. It works without a key but its shared limit is often busy; a free key from "
+        "semanticscholar.org/product/api makes it reliable."
+    )
+    s2_saved = credentials.is_saved(S2_KEY_VAR)
+    _secret_form(
+        "s2-key", "Semantic Scholar API key (optional)", S2_KEY_VAR, replace_label=s2_saved,
+        help_text="Stored in your user config folder next to the Claude key, readable only by you.",
+        success="Semantic Scholar key saved.",
+    )
+    if s2_saved:
+        st.button("Remove Semantic Scholar key", type="tertiary", icon=":material/delete:", on_click=_remove_secret,
+                  args=(S2_KEY_VAR, "Semantic Scholar key removed."))

@@ -30,10 +30,11 @@ class PaperQuery:
     categories: tuple[str, ...] = ()  # empty = any category
     tags: tuple[str, ...] = ()  # paper must carry at least one
     published_since: datetime | None = None
+    published_until: datetime | None = None
     with_links_only: bool = False
     venue_only: bool = False
     search_notes: bool = False
-    sort: str = "relevance"  # "relevance" | "newest"
+    sort: str = "relevance"  # "relevance" | "newest" | "timeless" (relevance without recency) | "citations"
     limit: int | None = None
     offset: int = 0
     exclude_ids: tuple[int, ...] = field(default_factory=tuple)
@@ -78,6 +79,9 @@ def row_to_paper(row: sqlite3.Row) -> Paper:
         digest_created_at=from_iso(row["digest_created_at"]),
         digest_content_hash=row["digest_content_hash"],
         content_hash=row["content_hash"],
+        timeless_score=row["timeless_score"],
+        citation_count=row["citation_count"],
+        influential_citation_count=row["influential_citation_count"],
         personal_notes=row["personal_notes"],
         notes_updated_at=from_iso(row["notes_updated_at"]),
         dedup_note=row["dedup_note"],
@@ -217,8 +221,14 @@ def ids_needing_classification(conn: sqlite3.Connection, taxonomy_version: str) 
     return [r["id"] for r in rows]
 
 
-def iter_papers(conn: sqlite3.Connection, ids: Iterable[int] | None = None) -> Iterator[Paper]:
-    if ids is None:
+def iter_papers(
+    conn: sqlite3.Connection, ids: Iterable[int] | None = None, published_since: datetime | None = None
+) -> Iterator[Paper]:
+    if ids is None and published_since is not None:
+        rows = conn.execute(
+            "SELECT * FROM papers WHERE published_at IS NULL OR published_at >= ? ORDER BY id", (to_iso(published_since),)
+        )
+    elif ids is None:
         rows = conn.execute("SELECT * FROM papers ORDER BY id")
     else:
         id_list = list(ids)
@@ -249,15 +259,34 @@ def update_signals(conn: sqlite3.Connection, paper_id: int, links: ResourceLinks
 def save_scores(conn: sqlite3.Connection, scores: Iterable[tuple[int, ScoreResult]], now: datetime) -> int:
     stamp = to_iso(now)
     rows = [
-        (s.total, s.explanation, json.dumps(s.to_dict(), ensure_ascii=False), stamp, paper_id)
+        (s.total, s.timeless, s.explanation, json.dumps(s.to_dict(), ensure_ascii=False), stamp, paper_id)
         for paper_id, s in scores
     ]
     conn.executemany(
-        "UPDATE papers SET relevance_score = ?, relevance_explanation = ?, score_breakdown_json = ?,"
-        " scored_at = ? WHERE id = ?",
+        "UPDATE papers SET relevance_score = ?, timeless_score = ?, relevance_explanation = ?,"
+        " score_breakdown_json = ?, scored_at = ? WHERE id = ?",
         rows,
     )
     return len(rows)
+
+
+def set_citations(
+    conn: sqlite3.Connection, paper_id: int, citations: int | None, influential: int | None, now: datetime
+) -> None:
+    conn.execute(
+        "UPDATE papers SET citation_count = ?, influential_citation_count = ?, citations_checked_at = ? WHERE id = ?",
+        (citations, influential, to_iso(now), paper_id),
+    )
+
+
+def ids_by_arxiv(conn: sqlite3.Connection, arxiv_ids: Iterable[str]) -> dict[str, int]:
+    id_list = list(arxiv_ids)
+    if not id_list:
+        return {}
+    rows = conn.execute(
+        f"SELECT id, arxiv_id FROM papers WHERE arxiv_id IN ({', '.join('?' * len(id_list))})", id_list
+    ).fetchall()
+    return {r["arxiv_id"]: r["id"] for r in rows}
 
 
 def get_paper(conn: sqlite3.Connection, paper_id: int) -> Paper | None:
@@ -301,6 +330,9 @@ def _where(q: PaperQuery) -> tuple[str, list]:
     if q.published_since:
         clauses.append("published_at >= ?")
         params.append(to_iso(q.published_since))
+    if q.published_until:
+        clauses.append("published_at < ?")
+        params.append(to_iso(q.published_until))
     if q.with_links_only:
         clauses.append("(code_url IS NOT NULL OR project_url IS NOT NULL)")
     if q.venue_only:
@@ -317,11 +349,11 @@ def _where(q: PaperQuery) -> tuple[str, list]:
 
 def list_papers(conn: sqlite3.Connection, q: PaperQuery) -> list[Paper]:
     where, params = _where(q)
-    order = (
-        "published_at DESC, relevance_score DESC"
-        if q.sort == "newest"
-        else "relevance_score DESC, published_at DESC"
-    )
+    order = {
+        "newest": "published_at DESC, relevance_score DESC",
+        "timeless": "timeless_score DESC, published_at DESC",
+        "citations": "citation_count IS NULL, citation_count DESC, timeless_score DESC",
+    }.get(q.sort, "relevance_score DESC, published_at DESC")
     sql = f"SELECT * FROM papers{where} ORDER BY {order}, id DESC"
     if q.limit is not None:
         sql += " LIMIT ? OFFSET ?"
@@ -332,6 +364,14 @@ def list_papers(conn: sqlite3.Connection, q: PaperQuery) -> list[Paper]:
 def count_papers(conn: sqlite3.Connection, q: PaperQuery) -> int:
     where, params = _where(q)
     return conn.execute(f"SELECT COUNT(*) FROM papers{where}", params).fetchone()[0]
+
+
+def years_in_library(conn: sqlite3.Connection) -> list[int]:
+    rows = conn.execute(
+        "SELECT DISTINCT CAST(substr(published_at, 1, 4) AS INTEGER) AS year FROM papers"
+        " WHERE published_at IS NOT NULL ORDER BY year DESC"
+    ).fetchall()
+    return [r["year"] for r in rows]
 
 
 def tags_in_use(conn: sqlite3.Connection) -> list[str]:

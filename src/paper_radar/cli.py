@@ -4,6 +4,9 @@
     paper-radar serve [--open]    run the local web server in this terminal
     paper-radar install-desktop   add Paper Radar to the app menu (Linux)
     paper-radar uninstall-desktop
+    paper-radar install-mcp       let your Claude Code sessions use the library (MCP)
+    paper-radar uninstall-mcp
+    paper-radar mcp               run the MCP server (Claude Code starts this itself)
     paper-radar paths             show where data, settings and logs live
 
 The window is a Chrome/Chromium/Edge/Brave "app" window with its own profile, so it behaves like
@@ -71,6 +74,66 @@ def icon_path() -> Path:
     return base / "icons" / "hicolor" / "scalable" / "apps" / "paper-radar.svg"
 
 
+def executable() -> str:
+    """The installed `paper-radar` command, also when called from inside the running app."""
+    found = shutil.which("paper-radar")
+    if found:
+        return found
+    sibling = Path(sys.executable).parent / ("paper-radar.exe" if os.name == "nt" else "paper-radar")
+    return str(sibling) if sibling.exists() else str(Path(sys.argv[0]).resolve())
+
+
+# --- Claude Code MCP registration -----------------------------------------------------------
+
+MCP_NAME = "paper-radar"
+
+
+def register_mcp() -> tuple[bool, str]:
+    """Register the MCP server with Claude Code for all of this user's projects."""
+    from paper_radar.llm.claude_code_provider import find_claude, subprocess_env
+
+    claude = find_claude()
+    if not claude:
+        return False, "Claude Code isn't installed (no `claude` command found)."
+    env = subprocess_env()
+    subprocess.run([claude, "mcp", "remove", MCP_NAME, "-s", "user"], capture_output=True, text=True, env=env, check=False)
+    result = subprocess.run(
+        [claude, "mcp", "add", "-s", "user", MCP_NAME, "--", executable(), "mcp"],
+        capture_output=True, text=True, env=env, check=False,
+    )
+    output = (result.stdout or result.stderr).strip()
+    if result.returncode != 0:
+        return False, f"Claude Code couldn't add the server: {output}"
+    return True, "Connected. New Claude Code sessions can use your Paper Radar library."
+
+
+def unregister_mcp() -> tuple[bool, str]:
+    from paper_radar.llm.claude_code_provider import find_claude, subprocess_env
+
+    claude = find_claude()
+    if not claude:
+        return False, "Claude Code isn't installed."
+    result = subprocess.run(
+        [claude, "mcp", "remove", MCP_NAME, "-s", "user"], capture_output=True, text=True, env=subprocess_env(), check=False
+    )
+    return result.returncode == 0, (result.stdout or result.stderr).strip()
+
+
+def mcp_registered() -> bool:
+    from paper_radar.llm.claude_code_provider import find_claude, subprocess_env
+
+    claude = find_claude()
+    if not claude:
+        return False
+    try:
+        result = subprocess.run(
+            [claude, "mcp", "get", MCP_NAME], capture_output=True, text=True, env=subprocess_env(), timeout=30, check=False
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0
+
+
 # --- Browser --------------------------------------------------------------------------------
 
 def find_app_browser() -> str | None:
@@ -125,6 +188,9 @@ def wait_for_window_close(profile: Path, poll: float = 1.0) -> None:
 
 def port_is_free(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        if os.name != "nt":
+            # Like the server itself: a port left in TIME_WAIT by a just-closed server counts as free.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
         except OSError:
@@ -303,16 +369,37 @@ def cmd_install_desktop(args: argparse.Namespace) -> int:
     if not sys.platform.startswith("linux"):
         print("Desktop entries are only set up automatically on Linux. Run `paper-radar` to open the app.")
         return 1
-    executable = shutil.which("paper-radar") or str(Path(sys.argv[0]).resolve())
+    command = executable()
     entry = applications_dir() / "paper-radar.desktop"
     entry.parent.mkdir(parents=True, exist_ok=True)
-    entry.write_text(desktop_entry(executable))
+    entry.write_text(desktop_entry(command))
     entry.chmod(0o755)
     icon_path().parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ASSETS_DIR / "mark.svg", icon_path())
     if tool := shutil.which("update-desktop-database"):
         subprocess.run([tool, str(entry.parent)], check=False, capture_output=True)
-    print(f"Added Paper Radar to your app menu ({entry}).\nIt runs: {executable} open")
+    print(f"Added Paper Radar to your app menu ({entry}).\nIt runs: {command} open")
+    return 0
+
+
+def cmd_install_mcp(args: argparse.Namespace) -> int:
+    ok, message = register_mcp()
+    print(message)
+    if ok:
+        print('Try it in Claude Code: "Using paper-radar, digest this week\'s papers" or "deep-read paper 12".')
+    return 0 if ok else 1
+
+
+def cmd_uninstall_mcp(args: argparse.Namespace) -> int:
+    ok, message = unregister_mcp()
+    print(message or ("Removed." if ok else "Nothing to remove."))
+    return 0 if ok else 1
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from paper_radar.mcp_server import main as serve_mcp
+
+    serve_mcp()
     return 0
 
 
@@ -356,6 +443,9 @@ def main(argv: list[str] | None = None) -> int:
     serve_cmd.add_argument("--open", action="store_true", help="also open it in the default browser")
     sub.add_parser("install-desktop", help="add Paper Radar to the app menu (Linux)")
     sub.add_parser("uninstall-desktop", help="remove the app menu entry")
+    sub.add_parser("install-mcp", help="let your Claude Code sessions use the library (MCP)")
+    sub.add_parser("uninstall-mcp", help="disconnect Paper Radar from Claude Code")
+    sub.add_parser("mcp", help="run the MCP server on stdio (Claude Code starts this itself)")
     sub.add_parser("paths", help="show where data, settings and logs live")
     args = parser.parse_args(argv)
     if args.command is None:
@@ -365,6 +455,9 @@ def main(argv: list[str] | None = None) -> int:
         "serve": cmd_serve,
         "install-desktop": cmd_install_desktop,
         "uninstall-desktop": cmd_uninstall_desktop,
+        "install-mcp": cmd_install_mcp,
+        "uninstall-mcp": cmd_uninstall_mcp,
+        "mcp": cmd_mcp,
         "paths": cmd_paths,
     }
     return handlers[args.command](args)

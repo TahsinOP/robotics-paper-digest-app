@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 from paper_radar.models import Status
@@ -18,6 +20,7 @@ def page() -> None:
     ctx = get_context()
     with ctx.connect() as conn:
         stats = papers.library_stats(conn)
+        years = papers.years_in_library(conn)
 
     st.html('<style>[data-testid="stMainBlockContainer"] { max-width: 72rem; }</style>')  # tables need room
     st.title("Library")
@@ -27,9 +30,13 @@ def page() -> None:
         f"{stats.with_notes:,} with notes. Select a row to open the paper.</p>"
     )
 
-    search_col, status_col, topic_col = st.columns([0.44, 0.28, 0.28])
+    search_col, year_col, status_col, topic_col = st.columns([0.37, 0.17, 0.23, 0.23])
     search = search_col.text_input(
         "Search", key="lib_search", placeholder="Title, abstract, author or your notes", icon=":material/search:"
+    )
+    year = year_col.selectbox(
+        "Year", [0, *years], key="lib_year", format_func=lambda y: "Any year" if y == 0 else str(y),
+        help="Years that have papers in your library. Explore can bring in more.",
     )
     statuses = status_col.multiselect(
         "Status", list(STATUS_LABELS), key="lib_status", format_func=STATUS_LABELS.get, placeholder="Any status"
@@ -45,6 +52,8 @@ def page() -> None:
         search_notes=True,
         sort="newest",
         limit=ROW_LIMIT,
+        published_since=datetime(year, 1, 1, tzinfo=timezone.utc) if year else None,
+        published_until=datetime(year + 1, 1, 1, tzinfo=timezone.utc) if year else None,
     )
     with ctx.connect() as conn:
         matching = papers.count_papers(conn, query)
@@ -63,6 +72,7 @@ def page() -> None:
             "Status": STATUS_LABELS[p.status.value],
             "Submitted": p.published_at.date() if p.published_at else None,
             "Score": p.relevance_score,
+            "Citations": p.citation_count,
             "Digest": {"abstract_only": "Abstract", "partial_full_text": "Part of full text", "full_text": "Full text"}.get(
                 p.digest_source_level.value, ""
             ),
@@ -83,6 +93,7 @@ def page() -> None:
             "Status": st.column_config.TextColumn(width="small"),
             "Submitted": st.column_config.DateColumn(format="D MMM YYYY", width="medium"),
             "Score": st.column_config.NumberColumn(format="%d", width="small"),
+            "Citations": st.column_config.NumberColumn(format="%d", width="small", help="From Semantic Scholar, when known"),
             "Digest": st.column_config.TextColumn("AI digest", width="small"),
             "Notes": st.column_config.CheckboxColumn(width="small"),
         },

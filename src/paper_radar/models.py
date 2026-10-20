@@ -81,6 +81,12 @@ class ScoreResult:
     components: dict[str, ScoreComponent]
     matched_keywords: tuple[str, ...]
 
+    @property
+    def timeless(self) -> float:
+        """The score without the recency factor, for ranking papers from past years."""
+        recency = self.components.get("recency")
+        return round(self.total - (recency.points if recency else 0.0), 1)
+
     def to_dict(self) -> dict:
         return {
             "total": self.total,
@@ -133,6 +139,9 @@ class Paper:
     digest_created_at: datetime | None
     digest_content_hash: str | None
     content_hash: str
+    timeless_score: float | None
+    citation_count: int | None
+    influential_citation_count: int | None
     personal_notes: str
     notes_updated_at: datetime | None
     dedup_note: str | None

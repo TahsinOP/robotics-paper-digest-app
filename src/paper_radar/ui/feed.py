@@ -136,7 +136,7 @@ def page() -> None:
     with ctx.connect() as conn:
         prefs = ctx.preferences(conn)
         library.ensure_scores_current(conn, prefs, ctx.taxonomy, now())
-        last = app_state.last_refresh(conn)
+        last = app_state.last_refresh(conn, "arxiv")
         in_window = papers.count_papers(
             conn,
             PaperQuery(published_since=now() - timedelta(days=prefs.lookback_days), categories=prefs.included_categories),
@@ -175,12 +175,12 @@ def page() -> None:
     with st.container(horizontal=True, vertical_alignment="center", key="act-feed-batch"):
         st.caption(f"Showing {len(shown):,} of {matching:,} matching papers")
         st.space("stretch")
-        if undigested and digest_view.keys_ready():
+        if undigested and digest_view.engine_ready(prefs):
             summarize = st.button(
                 f"Summarize the first {len(undigested)} abstracts",
                 icon=":material/auto_awesome:",
                 type="tertiary",
-                help=f"AI screening digests from the abstracts, {digest_view.cost_hint(ctx, prefs, 'abstract')} each.",
+                help=f"AI screening digests from the abstracts; {digest_view.cost_hint(ctx, prefs, 'abstract')}.",
             )
         else:
             summarize = False

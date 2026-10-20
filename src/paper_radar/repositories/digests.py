@@ -27,6 +27,7 @@ class DigestRecord:
     output_tokens: int | None
     cost_usd: float | None
     created_at: datetime
+    engine: str  # "anthropic" (API key), "claude_code" (app button) or "claude_code_session" (MCP)
 
 
 def _record(row: sqlite3.Row) -> DigestRecord:
@@ -44,6 +45,7 @@ def _record(row: sqlite3.Row) -> DigestRecord:
         output_tokens=row["output_tokens"],
         cost_usd=row["cost_usd"],
         created_at=from_iso(row["created_at"]),
+        engine=row["engine"],
     )
 
 
@@ -73,18 +75,21 @@ def save(
     output_tokens: int | None,
     cost_usd: float | None,
     now: datetime,
+    engine: str = "anthropic",
 ) -> DigestRecord:
     conn.execute(
         "INSERT INTO digests (paper_id, source_level, content_hash, prompt_version, model, served_model,"
-        " digest_json, source_note, input_tokens, output_tokens, cost_usd, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        " digest_json, source_note, input_tokens, output_tokens, cost_usd, created_at, engine)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         " ON CONFLICT (paper_id, source_level, content_hash, prompt_version, model) DO UPDATE SET"
         " served_model = excluded.served_model, digest_json = excluded.digest_json,"
         " source_note = excluded.source_note, input_tokens = excluded.input_tokens,"
-        " output_tokens = excluded.output_tokens, cost_usd = excluded.cost_usd, created_at = excluded.created_at",
+        " output_tokens = excluded.output_tokens, cost_usd = excluded.cost_usd, created_at = excluded.created_at,"
+        " engine = excluded.engine",
         (
             paper_id, source_level, content_hash, prompt_version, model, served_model,
             json.dumps(digest, ensure_ascii=False), source_note, input_tokens, output_tokens, cost_usd, to_iso(now),
+            engine,
         ),
     )
     refresh_paper_digest(conn, paper_id)

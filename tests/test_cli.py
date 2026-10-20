@@ -72,3 +72,17 @@ def test_paths_lists_locations(capsys) -> None:
     assert cli.main(["paths"]) == 0
     output = capsys.readouterr().out
     assert "Library database" in output and "API key file" in output
+
+
+def test_register_mcp_adds_a_user_scoped_server(tmp_path, monkeypatch) -> None:
+    log = tmp_path / "calls.txt"
+    fake = tmp_path / "claude"
+    fake.write_text(f'#!/bin/sh\necho "$@" >> {log}\n')
+    fake.chmod(0o755)
+    monkeypatch.setenv("PAPER_RADAR_CLAUDE_BIN", str(fake))
+    ok, message = cli.register_mcp()
+    assert ok, message
+    calls = log.read_text().splitlines()
+    assert calls[0] == "mcp remove paper-radar -s user"
+    assert calls[1].startswith("mcp add -s user paper-radar -- ") and calls[1].endswith(" mcp")
+    assert cli.mcp_registered()  # the fake exits 0 for `mcp get`

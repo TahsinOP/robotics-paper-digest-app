@@ -68,7 +68,8 @@ def _actions(paper: Paper) -> None:
 
 
 @st.fragment
-def paper_entry(paper_id: int) -> None:
+def paper_entry(paper_id: int, timeless: bool = False) -> None:
+    """One ranked entry. `timeless` shows the score without recency (for past years)."""
     ctx = get_context()
     with ctx.connect() as conn:
         paper = papers.get_paper(conn, paper_id)
@@ -89,7 +90,7 @@ def paper_entry(paper_id: int) -> None:
         states.append("This week")
     with st.container(key=f"entry-{paper_id}"):
         gutter, body = st.columns([0.11, 0.89], gap="small")
-        gutter.html(theme.gutter_html(paper))
+        gutter.html(theme.gutter_html(paper, timeless=timeless))
         with body:
             title_button(paper)
             st.html(

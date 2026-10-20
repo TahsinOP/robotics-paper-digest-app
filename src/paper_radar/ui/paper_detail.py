@@ -178,7 +178,7 @@ def _digest_tab(ctx, paper: Paper) -> None:
     with ctx.connect() as conn:
         prefs = ctx.preferences(conn)
         record = digest_repo.best_for_paper(conn, paper.id)
-    ready = digest_view.keys_ready()
+    ready = digest_view.engine_ready(prefs)
     if paper.digest:
         digest_view.render_digest(paper, record)
     elif ready:
@@ -188,11 +188,7 @@ def _digest_tab(ctx, paper: Paper) -> None:
             "written from the abstract or the full paper.</p>"
         )
     else:
-        st.info(
-            "Add a Claude API key in Settings → AI digests to summarize papers. Everything else works without one.",
-            title="AI digests are off",
-            icon=":material/key:",
-        )
+        st.info(digest_view.not_ready_message(prefs), title="AI digests are off", icon=":material/key:")
         return
 
     # None: no usable digest yet (or only one for an older version of the paper).
@@ -204,7 +200,7 @@ def _digest_tab(ctx, paper: Paper) -> None:
             icon=":material/article:",
             type="primary",
             key=f"dg-full-{paper.id}",
-            help=f"Downloads the PDF from arXiv and summarizes all of it ({digest_view.cost_hint(ctx, prefs, 'full_text')}).",
+            help=f"Downloads the PDF from arXiv and summarizes all of it; {digest_view.cost_hint(ctx, prefs, 'full_text')}.",
             disabled=not paper.pdf_url,
         ):
             run = ("full_text", False)
@@ -212,7 +208,7 @@ def _digest_tab(ctx, paper: Paper) -> None:
             "Summarize the abstract",
             icon=":material/short_text:",
             key=f"dg-abs-{paper.id}",
-            help=f"A quick screening digest from the abstract only ({digest_view.cost_hint(ctx, prefs, 'abstract')}).",
+            help=f"A quick screening digest from the abstract only; {digest_view.cost_hint(ctx, prefs, 'abstract')}.",
         ):
             run = ("abstract", False)
         if level is not None and st.button(

@@ -12,6 +12,7 @@ dependencies = [
     "anthropic>=1.15",
     "pypdf>=6.0",
     "pydantic>=2.7",
+    "mcp>=2.3",
 ]
 
 [project.scripts]

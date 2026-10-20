@@ -123,14 +123,14 @@ def page() -> None:
             st.caption("Topics: " + ", ".join(f"{name} ({count})" for name, count in mix))
         st.space("stretch")
         prepare = False
-        if unread_in_full and digest_view.keys_ready():
-            with ctx.connect() as conn:
-                prefs = ctx.preferences(conn)
+        with ctx.connect() as conn:
+            prefs = ctx.preferences(conn)
+        if unread_in_full and digest_view.engine_ready(prefs):
             prepare = st.button(
                 f"Prepare full-text digests ({len(unread_in_full)})",
                 icon=":material/auto_awesome:",
                 type="tertiary",
-                help=f"Reads each paper's PDF from arXiv and writes a digest, {digest_view.cost_hint(ctx, prefs, 'full_text')} each.",
+                help=f"Reads each paper's PDF from arXiv and writes a digest; {digest_view.cost_hint(ctx, prefs, 'full_text')}.",
             )
     if prepare:
         digest_view.run_batch(unread_in_full, "full_text")

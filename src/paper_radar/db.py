@@ -148,6 +148,16 @@ MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE papers ADD COLUMN digest_content_hash TEXT;
     ALTER TABLE papers ADD COLUMN digest_prompt_version TEXT;
     """,
+    # 3: past years and citations. timeless_score is the relevance score without the recency
+    # factor, for ranking old papers; citation counts come from Semantic Scholar.
+    """
+    ALTER TABLE papers ADD COLUMN timeless_score REAL;
+    ALTER TABLE papers ADD COLUMN citation_count INTEGER;
+    ALTER TABLE papers ADD COLUMN influential_citation_count INTEGER;
+    ALTER TABLE papers ADD COLUMN citations_checked_at TEXT;
+    CREATE INDEX idx_papers_timeless ON papers(timeless_score);
+    ALTER TABLE digests ADD COLUMN engine TEXT NOT NULL DEFAULT 'api';
+    """,
 )
 
 

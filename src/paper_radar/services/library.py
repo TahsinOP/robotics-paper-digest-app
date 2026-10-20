@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from paper_radar.models import Paper, Status
 from paper_radar.preferences import Preferences, fingerprint
@@ -15,6 +15,8 @@ from paper_radar.services.signals import detect_venue, extract_links
 from paper_radar.taxonomy import Taxonomy
 
 SCORES_STAMP_KEY = "scores_stamp"
+# Recency matters only for recent papers; older ones are rescored when preferences change.
+DAILY_RESCORE_WINDOW_DAYS = 90
 
 
 def ranking_input(paper: Paper) -> RankingInput:
@@ -32,26 +34,48 @@ def ranking_input(paper: Paper) -> RankingInput:
     )
 
 
-def rescore_all(conn: sqlite3.Connection, prefs: Preferences, taxonomy: Taxonomy, now: datetime) -> int:
+def rescore_all(
+    conn: sqlite3.Connection,
+    prefs: Preferences,
+    taxonomy: Taxonomy,
+    now: datetime,
+    *,
+    published_since: datetime | None = None,
+) -> int:
+    """Rescore every paper, or only papers published since a date (plus undated ones)."""
     keywords = compile_keywords(prefs.focus_keywords)
     results = [
         (paper.id, score_paper(ranking_input(paper), prefs, taxonomy, keywords, now))
-        for paper in papers.iter_papers(conn)
+        for paper in papers.iter_papers(conn, published_since=published_since)
     ]
     count = papers.save_scores(conn, results, now)
     app_state.set_json(conn, SCORES_STAMP_KEY, _scores_stamp(prefs, taxonomy, now), now)
     return count
 
 
-def _scores_stamp(prefs: Preferences, taxonomy: Taxonomy, now: datetime) -> str:
-    return f"{now.astimezone().date().isoformat()}|{fingerprint(prefs)}|{taxonomy.version}"
+def rescore_ids(conn: sqlite3.Connection, paper_ids: list[int], prefs: Preferences, taxonomy: Taxonomy, now: datetime) -> int:
+    keywords = compile_keywords(prefs.focus_keywords)
+    results = [
+        (paper.id, score_paper(ranking_input(paper), prefs, taxonomy, keywords, now))
+        for paper in papers.iter_papers(conn, paper_ids)
+    ]
+    return papers.save_scores(conn, results, now)
+
+
+def _scores_stamp(prefs: Preferences, taxonomy: Taxonomy, now: datetime) -> dict:
+    return {"day": now.astimezone().date().isoformat(), "inputs": f"{fingerprint(prefs)}|{taxonomy.version}"}
 
 
 def ensure_scores_current(conn: sqlite3.Connection, prefs: Preferences, taxonomy: Taxonomy, now: datetime) -> bool:
-    """Rescore when the day, the preferences or the taxonomy changed since the last scoring."""
-    if app_state.get_json(conn, SCORES_STAMP_KEY) == _scores_stamp(prefs, taxonomy, now):
+    """Rescore everything when preferences or the taxonomy changed; on a new day, only recent papers."""
+    stamp = app_state.get_json(conn, SCORES_STAMP_KEY)
+    current = _scores_stamp(prefs, taxonomy, now)
+    if stamp == current:
         return False
-    rescore_all(conn, prefs, taxonomy, now)
+    if isinstance(stamp, dict) and stamp.get("inputs") == current["inputs"]:
+        rescore_all(conn, prefs, taxonomy, now, published_since=now - timedelta(days=DAILY_RESCORE_WINDOW_DAYS))
+    else:
+        rescore_all(conn, prefs, taxonomy, now)
     return True
 
 

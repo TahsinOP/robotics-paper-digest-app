@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from paper_radar.llm import credentials
-from paper_radar.llm.anthropic_provider import AnthropicProvider
-from paper_radar.llm.base import MODELS, estimate_cost
+from paper_radar.llm.base import MODELS, LLMProvider, estimate_cost
+from paper_radar.llm.factory import engine_status, make_provider
 from paper_radar.models import Paper
 from paper_radar.preferences import Preferences
 from paper_radar.repositories import digests as digest_repo
@@ -21,14 +20,31 @@ LEVEL_LABELS = {
     "full_text": ("Full text", "green", ":material/article:"),
 }
 KIND_LABELS = {"paper_stated": "Stated by the authors", "interpretation": "Interpretation"}
+ENGINE_PHRASES = {
+    "claude_code": "via Claude Code on your plan",
+    "claude_code_session": "in one of your Claude Code sessions",
+    "anthropic": "via the Anthropic API",
+}
 
 
-def provider(prefs: Preferences) -> AnthropicProvider:
-    return AnthropicProvider(prefs.digest_model)
+def provider(prefs: Preferences) -> LLMProvider:
+    return make_provider(prefs.digest_engine, prefs.digest_model)
+
+
+def engine_ready(prefs: Preferences) -> bool:
+    return engine_status(prefs.digest_engine).ready
+
+
+def not_ready_message(prefs: Preferences) -> str:
+    if prefs.digest_engine == "api":
+        return "Add a Claude API key in Settings → AI digests, or switch the engine to Claude Code."
+    return "Claude Code isn't installed. Install it, or switch Settings → AI digests to an API key."
 
 
 def cost_hint(ctx: AppContext, prefs: Preferences, mode: str) -> str:
-    """'about $0.06', from past digests of this kind, else from typical token counts."""
+    """'about $0.06' for API digests, from past digests of this kind or typical token counts."""
+    if prefs.digest_engine != "api":
+        return "uses your Claude plan"
     level = "abstract_only" if mode == "abstract" else "full_text"
     with ctx.connect() as conn:
         average = digest_repo.average_cost(conn, level, prefs.digest_model)
@@ -65,12 +81,13 @@ def render_digest(paper: Paper, record: digest_repo.DigestRecord | None) -> None
         return
     label, color, icon = LEVEL_LABELS[paper.digest_source_level.value]
     model = MODELS.get(paper.digest_model or "")
-    model_name = model.label if model else (paper.digest_model or "an AI model")
+    model_name = model.label if model else "Claude"
+    via = f" {ENGINE_PHRASES.get(record.engine, '')}" if record else ""
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         st.badge(label, icon=icon, color=color)
         when = f" {relative_time(paper.digest_created_at, now())}" if paper.digest_created_at else ""
         source = f", from the {record.source_note[0].lower()}{record.source_note[1:]}" if record else ""
-        st.caption(f"Written{when} by {model_name}{source}. AI-generated: check claims against the paper.")
+        st.caption(f"Written{when} by {model_name}{via}{source}. AI-generated: check claims against the paper.")
     if paper.digest_is_stale:
         st.warning("arXiv has a newer version of this paper than the one this digest describes.", title="Digest is out of date")
     notes = digest.get("verification_notes") or []
@@ -138,7 +155,12 @@ def run_one(paper_id: int, mode: str, *, force: bool = False) -> bool:
             st.write(str(exc))
             return False
         cost = outcome.record.cost_usd
-        done = "Loaded the saved digest" if outcome.cached else f"Digest written (cost about ${cost:.3f})" if cost else "Digest written"
+        if outcome.cached:
+            done = "Loaded the saved digest"
+        elif cost:
+            done = f"Digest written (cost about ${cost:.3f})"
+        else:
+            done = "Digest written on your Claude plan"
         status.update(label=done, state="complete")
     return True
 
@@ -164,5 +186,3 @@ def run_batch(paper_ids: list[int], mode: str) -> None:
     st.session_state["digest_batch_done"] = summary
 
 
-def keys_ready() -> bool:
-    return credentials.status().configured

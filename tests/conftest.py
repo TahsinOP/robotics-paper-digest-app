@@ -27,8 +27,10 @@ def isolated_user_dirs(tmp_path_factory: pytest.TempPathFactory, monkeypatch: py
     base = tmp_path_factory.mktemp("user")
     monkeypatch.setenv("PAPER_RADAR_DATA_DIR", str(base / "data"))
     monkeypatch.setenv("PAPER_RADAR_CONFIG_DIR", str(base / "config"))
-    for var in ("PAPER_RADAR_DB_PATH", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+    for var in ("PAPER_RADAR_DB_PATH", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "SEMANTIC_SCHOLAR_API_KEY"):
         monkeypatch.delenv(var, raising=False)
+    # Tests never run the real Claude Code; individual tests point this at a fake script.
+    monkeypatch.setenv("PAPER_RADAR_CLAUDE_BIN", str(base / "no-claude-here"))
 
 
 @pytest.fixture(scope="session")

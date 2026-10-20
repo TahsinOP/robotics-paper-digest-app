@@ -149,3 +149,17 @@ def test_empty_page_before_total_is_retried() -> None:
     pages = [FakeResponse(content=feed_xml([], 2)), FakeResponse(content=feed_xml(["2610.00001", "2610.00002"], 2))]
     source, _ = make_source(pages)
     assert len(source.fetch_page("cat:cs.RO", 0, 10).entries) == 2
+
+
+def test_keyword_search_uses_relevance_within_robotics_categories() -> None:
+    source, _ = make_source([FakeResponse()], cross_list_categories=("cs.CV",))
+    result = source.search('loop closure "pose graph"', since=datetime(2015, 1, 1, tzinfo=timezone.utc),
+                           until=datetime(2016, 1, 1, tzinfo=timezone.utc), max_results=50)
+    params = source.session.requests[0]
+    assert params["sortBy"] == "relevance"
+    assert params["search_query"] == (
+        '(all:loop AND all:closure AND all:"pose graph") AND (cat:cs.RO OR cat:cs.CV) '
+        "AND submittedDate:[201501010000 TO 201601010000]"
+    )
+    assert len(result.candidates) == 3
+    assert source.search("   ", since=NOW, until=NOW).candidates == []

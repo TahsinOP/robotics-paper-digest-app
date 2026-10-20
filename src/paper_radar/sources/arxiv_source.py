@@ -11,6 +11,7 @@ Two queries run per refresh:
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -72,6 +73,23 @@ class ArxivQuery:
     label: str
     search_query: str
     cap: int
+    sort_by: str = "submittedDate"  # or "relevance" for keyword searches
+
+
+_TOKEN = re.compile(r'"([^"]+)"|(\S+)')
+_OPERATORS = {"and", "or", "andnot", "not"}
+
+
+def keyword_clause(text: str) -> str:
+    """'loop closure "pose graph"' -> 'all:loop AND all:closure AND all:"pose graph"' (arXiv stems words)."""
+    terms = []
+    for phrase, word in _TOKEN.findall(text):
+        value = (phrase or word).replace('"', "").strip()
+        if not value or value.lower() in _OPERATORS:
+            continue
+        simple = re.fullmatch(r"[\w.-]+", value) and " " not in value
+        terms.append(f"all:{value}" if simple else f'all:"{value}"')
+    return " AND ".join(terms)
 
 
 def _text(element: ET.Element, path: str) -> str | None:
@@ -215,7 +233,7 @@ class ArxivSource:
         start = 0
         while len(out) < query.cap:
             size = min(self.page_size, query.cap - len(out))
-            page = self.fetch_page(query.search_query, start, size)
+            page = self.fetch_page(query.search_query, start, size, sort_by=query.sort_by)
             out.extend(page.entries)
             if progress:
                 progress(f"{query.label}: {len(out):,} of {min(page.total_results, query.cap):,} papers")
@@ -223,14 +241,50 @@ class ArxivSource:
             if not page.entries or start >= page.total_results:
                 return
 
-    def fetch_page(self, search_query: str, start: int, size: int) -> ParsedPage:
+    def search(
+        self,
+        text: str,
+        *,
+        since: datetime,
+        until: datetime,
+        max_results: int = 200,
+        progress: ProgressCallback | None = None,
+    ) -> FetchResult:
+        """Papers in cs.RO and the neighbouring categories that match keywords, best matches first."""
+        terms = keyword_clause(text)
+        if not terms:
+            return FetchResult()
+        categories = " OR ".join(f"cat:{c}" for c in ("cs.RO", *self.cross_list_categories))
+        query = ArxivQuery(
+            "arXiv search", f"({terms}) AND ({categories}) AND {_date_clause(since, until)}", max_results, "relevance"
+        )
+        result = FetchResult()
+        try:
+            self._run_query(query, result.candidates, progress)
+        except SourceError as exc:
+            result.errors.append(f"{exc}.")
+        return result
+
+    def fetch_by_ids(self, arxiv_ids: list[str]) -> list[PaperCandidate]:
+        """Metadata for specific papers, in batches of 100 ids."""
+        candidates: list[PaperCandidate] = []
+        for i in range(0, len(arxiv_ids), 100):
+            batch = arxiv_ids[i : i + 100]
+            candidates += self.fetch_page("", 0, len(batch), id_list=",".join(batch)).entries
+        return candidates
+
+    def fetch_page(
+        self, search_query: str, start: int, size: int, *, id_list: str | None = None, sort_by: str = "submittedDate"
+    ) -> ParsedPage:
         params = {
             "search_query": search_query,
             "start": start,
             "max_results": size,
-            "sortBy": "submittedDate",
+            "sortBy": sort_by,
             "sortOrder": "descending",
         }
+        if id_list:
+            params = {"id_list": id_list, "max_results": size}
         last_problem = "arXiv could not be reached"
         for attempt in range(self.max_retries + 1):
             if attempt:

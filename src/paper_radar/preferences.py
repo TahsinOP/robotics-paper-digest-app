@@ -52,6 +52,7 @@ class Preferences:
     recency_half_life_days: float = 10.0
     score_weights: ScoreWeights = ScoreWeights()
     weekly_target: int = 4
+    digest_engine: str = "claude_code"  # "claude_code" (your Claude plan) or "api" (API key)
     digest_model: str = DEFAULT_MODEL
     digest_effort: str = "medium"
     fulltext_max_chars: int = 120_000
@@ -102,6 +103,7 @@ def validate(prefs: Preferences, taxonomy: Taxonomy) -> Preferences:
         recency_half_life_days=float(_clamp(float(prefs.recency_half_life_days), HALF_LIFE_RANGE)),
         score_weights=ScoreWeights(*(max(0.0, float(v)) for v in asdict(sw).values())),
         weekly_target=int(_clamp(int(prefs.weekly_target), WEEKLY_TARGET_RANGE)),
+        digest_engine=prefs.digest_engine if prefs.digest_engine in ("claude_code", "api") else "claude_code",
         digest_model=prefs.digest_model if prefs.digest_model in MODELS else DEFAULT_MODEL,
         digest_effort=prefs.digest_effort if prefs.digest_effort in EFFORT_LEVELS else "medium",
         fulltext_max_chars=int(_clamp(int(prefs.fulltext_max_chars), FULLTEXT_CHARS_RANGE)),
@@ -124,6 +126,7 @@ def default_preferences(taxonomy: Taxonomy, profile_path: Path) -> Preferences:
         recency_half_life_days=scoring.get("recency_half_life_days", defaults.recency_half_life_days),
         score_weights=_score_weights(defaults.score_weights, scoring.get("weights")),
         weekly_target=(profile.get("reading") or {}).get("weekly_target", defaults.weekly_target),
+        digest_engine=digests.get("engine", defaults.digest_engine),
         digest_model=digests.get("model", defaults.digest_model),
         digest_effort=digests.get("effort", defaults.digest_effort),
         fulltext_max_chars=digests.get("fulltext_max_chars", defaults.fulltext_max_chars),
@@ -144,6 +147,7 @@ def from_dict(data: dict, defaults: Preferences, taxonomy: Taxonomy) -> Preferen
         recency_half_life_days=merged["recency_half_life_days"],
         score_weights=_score_weights(defaults.score_weights, merged["score_weights"]),
         weekly_target=merged["weekly_target"],
+        digest_engine=merged["digest_engine"],
         digest_model=merged["digest_model"],
         digest_effort=merged["digest_effort"],
         fulltext_max_chars=merged["fulltext_max_chars"],
